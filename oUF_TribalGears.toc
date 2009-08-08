@@ -1,0 +1,9 @@
+## Interface: 30000
+## Title: oUF_TribalGears
+## Author: Cargor
+## X-eMail: xconstruct@gmail.com
+## Notes: Layout for haste's oUF
+## RequiredDeps: oUF
+## OptionalDeps: oUF_DebuffHighlight
+
+tribalgears.lua
