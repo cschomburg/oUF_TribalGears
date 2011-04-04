@@ -4,6 +4,8 @@
 ## X-eMail: xconstruct@gmail.com
 ## Notes: Layout for haste's oUF
 ## RequiredDeps: oUF
-## OptionalDeps: oUF_DebuffHighlight
+
+LibStub.lua
+LibExtendedBars-1.0\LibExtendedBars-1.0.lua
 
 tribalgears.lua

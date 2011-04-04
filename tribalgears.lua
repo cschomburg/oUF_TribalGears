@@ -14,6 +14,15 @@ local backdrop = {
 	insets = {left = -2, right = -2, top = -2, bottom = -2},
 }
 
+local buffIndicators = {
+	["DRUID"] = {"Mark of the Wild", "Gift of the Wild"},
+	["PRIEST"] = {"Power Word: Fortitude", "Prayer of Fortitude"},
+}
+
+local CLASS = select(2, UnitClass("player"))
+
+local LEB = LibStub("LibExtendedBars-1.0")
+
 -- 	o%	red <-- orange <-- dark gray <-- almost black	100%
 local hpGradient = {1,0,0, 1,.5,0, .3,.3,.3, .15,.15,.15}
 
@@ -104,6 +113,19 @@ local PostUpdateHealth = function(self, event, unit, bar, min, max)
 	updateName(self, event, unit)
 end
 
+local PreUpdatePower = function(self, event, unit)
+	local min = UnitPower("player", SPELL_POWER_MANA)
+	local max = UnitPowerMax("player", SPELL_POWER_MANA)
+
+	if(min ~= max) then
+		self.DruidMana:SetFormattedText("%d%%", floor(min/max * 100))
+	else
+		self.DruidMana:SetText()
+	end
+
+	self.DruidMana:SetAlpha(UnitPowerType("player") and 1 or 0)
+end
+
 -- And update power
 local PostUpdatePower = function(self, event, unit, bar, min, max)
 	if((min == 0 or not UnitIsConnected(unit)) and bar.value) then
@@ -115,15 +137,17 @@ local PostUpdatePower = function(self, event, unit, bar, min, max)
 	end
 end
 
--- Fortitude Indicator
+-- Buff Indicator
 local PostUpdateAura = function(self, event, unit)
-	if(not self.Fortitude) then return nil end
+	if(not self.Indicator or not buffIndicators[CLASS]) then return end
 
-	if(UnitAura(unit, "Power Word: Fortitude") or UnitAura(unit, "Prayer of Fortitude")) then
-		self.Fortitude:Hide()
-	else
-		self.Fortitude:Show()
+	self.Indicator:Hide()
+	for i, name in pairs(buffIndicators[CLASS]) do
+		if(UnitAura(unit, name)) then
+			return self.Indicator:Hide()
+		end
 	end
+	self.Indicator:Show()
 end
 
 local CastBarText = function(self, duration)
@@ -244,12 +268,14 @@ local func = function(settings, self, unit)
 	end
 
 	-- Health bars and text
-	local hp = CreateFrame("StatusBar", nil, self)
+	local hp = LEB.CreateExtendedBar(nil, self, unit == "player" and "RIGHT" or "LEFT")
 	hp:SetHeight(settings["hp-height"] or 22)
 	hp:SetStatusBarTexture(mainTex)
+	hp:GetStatusBarTexture():SetTexCoord(0, 1, 0, 1)
 	hp.smoothGradient = hpGradient
 	hp.colorTapping = true
 	hp.colorSmooth = true
+	hp.frequentUpdates = 0.1
 
 	--hp:SetFrameLevel(2)
 	hp:SetPoint"TOPLEFT"
@@ -265,11 +291,20 @@ local func = function(settings, self, unit)
 	hp.value = hpp
 
 	-- Power bars and text
-	local pp = CreateFrame"StatusBar"
+	local pp = LEB.CreateExtendedBar(nil, self, unit == "player" and "RIGHT" or "LEFT")
 	pp:SetHeight(settings["pp-height"] or 7)
 	pp:SetStatusBarTexture(mainTex)
 	pp:SetStatusBarColor(.25, .25, .35)
-	
+	pp.frequentUpdates = 0.1
+
+	if(unit == "player" and CLASS == "DRUID") then
+		local mana = pp:CreateFontString(nil, "OVERLAY")
+		mana:SetAllPoints()
+		mana:SetFontObject(GameFontNormalSmall)
+		mana:SetTextColor(1, 1, 1)
+		self.DruidMana = mana
+		self.PreUpdatePower = PreUpdatePower
+	end
 
 	pp:SetParent(self)
 	pp:SetFrameLevel(3)
@@ -277,6 +312,7 @@ local func = function(settings, self, unit)
 	pp:SetPoint"BOTTOMRIGHT"
 	pp:SetPoint("TOP", hp, "BOTTOM", 0, -1.35)
 
+	--pp.frequentUpdates = true
 	pp.colorTapping = true
 	pp.colorClass = true
 	pp.colorHappiness = true
@@ -322,6 +358,15 @@ local func = function(settings, self, unit)
 	ricon:SetPoint("TOP", hp, 0, 8)
 	self.RaidIcon = ricon
 
+	if(unit == "target") then
+		local cpoints = self:CreateFontString(nil, "OVERLAY")
+		cpoints:SetPoint("TOPRIGHT", self, "BOTTOMRIGHT", 0, -5)
+		cpoints:SetTextColor(1, 1, 0) 
+		cpoints:SetFont("Fonts\\FRIZQT__.TTF", 40, 'THINOUTLINE')
+		self.CPoints = cpoints
+		self.CPoints.unit = "player"
+	end
+
 	
 	-- Buffs for party
 	if(self:GetParent():GetName()=="oUF_Party") then
@@ -347,14 +392,14 @@ local func = function(settings, self, unit)
 		buffs.num = 0
 		self.Buffs = buffs
 
-		local fortitude = hp:CreateTexture(nil, "OVERLAY")
-		fortitude:SetParent(hp)
-		fortitude:SetPoint("TOPLEFT", hp, "TOPLEFT", 0 , 0)
-		fortitude:SetHeight(3.25)
-		fortitude:SetWidth(3.35)
-		fortitude:SetTexture(155/255,146/255,246/255)
-		fortitude:Hide()
-		self.Fortitude = fortitude
+		local indicator = hp:CreateTexture(nil, "OVERLAY")
+		indicator:SetParent(hp)
+		indicator:SetPoint("TOPLEFT", hp, "TOPLEFT", 0 , 0)
+		indicator:SetHeight(3.25)
+		indicator:SetWidth(3.35)
+		indicator:SetTexture(1, 0, 0)
+		indicator:Hide()
+		self.Indicator = indicator
 		self.PostUpdateAura = PostUpdateAura
 	end
 	
@@ -405,13 +450,6 @@ local func = function(settings, self, unit)
 		buffs:SetWidth(buffs.num/2*buffs.size+.5)
 		buffs:SetPoint("TOPLEFT", self, "TOPRIGHT", 1, -2)
 		self.Buffs = buffs
-
-		local cpoints = self:CreateFontString(nil, "OVERLAY")
-		cpoints:SetPoint("RIGHT", self, "LEFT", -9, 1)
-		cpoints:SetFont(DAMAGE_TEXT_FONT, 38)
-		cpoints:SetTextColor(1, 1, 1)
-		cpoints:SetJustifyH"RIGHT"
-		self.CPoints = cpoints
 
 		local name = self.Name
 		name:ClearAllPoints()
@@ -465,14 +503,14 @@ oUF:SetActiveStyle"TribalGears"
 oUF:SetActiveStyle"TribalGears - small"
 	oUF:Spawn("targettarget", "oUF_ToT"):SetPoint("BOTTOMRIGHT", oUF.units.target, "TOPRIGHT", 100, 7)
 	oUF:Spawn("targettargettarget", "oUF_ToToT"):SetPoint("BOTTOMLEFT", oUF.units.targettarget, "BOTTOMRIGHT", 7, 0)
-	oUF:Spawn("pet", "oUF_Pet"):SetPoint("TOPLEFT", oUF.units.player, "BOTTOMLEFT", -100, -7)
+--	oUF:Spawn("pet", "oUF_Pet"):SetPoint("TOPLEFT", oUF.units.player, "BOTTOMLEFT", -100, -7)
 	oUF:Spawn("focus", "oUF_Focus"):SetPoint("BOTTOMLEFT", oUF.units.player, "TOPLEFT", -100, 7)
 
 oUF:SetActiveStyle"TribalGears - tiny"
 for i=1, 8 do
 	local raid = oUF:Spawn("header", "oUF_Raid"..i)
 	raid:SetManyAttributes("showRaid", true, "yOffset", -5, "groupFilter", i)
-	raid:SetPoint("TOPLEFT", 15+65*(i-1), -15)
+	raid:SetPoint("TOPLEFT", 15+65*(i-1), -30)
 end
 
 local temptoggle = CreateFrame"Frame"
